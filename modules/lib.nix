@@ -132,4 +132,16 @@
   hasWork = cfg:
     cfg.aptPackages != [ ] || cfg.aptRepos != [ ] || cfg.debUrls != [ ]
     || cfg.debGetPackages != [ ];
+
+  mkSummary = cfg:
+    let
+      parts = (lib.optional (cfg.aptPackages != [ ])
+        "${toString (builtins.length cfg.aptPackages)} apt")
+        ++ (lib.optional (cfg.aptRepos != [ ])
+          "${toString (builtins.length cfg.aptRepos)} repo")
+        ++ (lib.optional (cfg.debUrls != [ ])
+          "${toString (builtins.length cfg.debUrls)} deb")
+        ++ (lib.optional (cfg.debGetPackages != [ ])
+          "${toString (builtins.length cfg.debGetPackages)} deb-get");
+    in lib.concatStringsSep " + " parts;
 }

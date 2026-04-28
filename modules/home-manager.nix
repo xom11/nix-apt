@@ -20,13 +20,18 @@ in {
         /usr/bin/sudo -v || { echo "[nix-apt] sudo failed, aborting"; exit 1; }
       fi
 
-      echo "[nix-apt] running ansible playbook..."
+      echo "[nix-apt] applying: ${myLib.mkSummary cfg}"
       export PATH="/usr/bin:/bin:$PATH"
       export ANSIBLE_BECOME_EXE="/usr/bin/sudo"
       export ANSIBLE_PYTHON_INTERPRETER="/usr/bin/python3"
-      ${pkgs.ansible}/bin/ansible-playbook \
-        -i localhost, \
-        ${playbook}
+      output=$(${pkgs.ansible}/bin/ansible-playbook -i localhost, ${playbook} 2>&1)
+      status=$?
+      if [ $status -ne 0 ]; then
+        echo "$output" | sed 's/^/  /'
+        exit $status
+      fi
+      recap=$(echo "$output" | grep -oE 'ok=[0-9]+ +changed=[0-9]+ +unreachable=[0-9]+ +failed=[0-9]+' | head -1)
+      echo "[nix-apt] $recap"
     '';
   };
 }
