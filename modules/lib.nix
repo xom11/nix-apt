@@ -1,4 +1,5 @@
-{ lib, pkgs }: {
+{ lib, pkgs }:
+rec {
   optionsAttrs = {
     aptPackages = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -16,7 +17,7 @@
           };
           keyUrl = lib.mkOption {
             type = lib.types.str;
-            description = "URL to GPG keyring file (binary .gpg or armored .asc).";
+            description = "URL to GPG keyring file (binary .gpg preferred over armored .asc).";
           };
           repo = lib.mkOption {
             type = lib.types.str;
@@ -49,6 +50,22 @@
       example = [ "brave-browser" "tailscale" "code" ];
     };
   };
+
+  hasWork = cfg:
+    cfg.aptPackages != [ ] || cfg.aptRepos != [ ] || cfg.debUrls != [ ]
+    || cfg.debGetPackages != [ ];
+
+  mkSummary = cfg:
+    let
+      parts = (lib.optional (cfg.aptPackages != [ ])
+        "${toString (builtins.length cfg.aptPackages)} apt")
+        ++ (lib.optional (cfg.aptRepos != [ ])
+          "${toString (builtins.length cfg.aptRepos)} repo")
+        ++ (lib.optional (cfg.debUrls != [ ])
+          "${toString (builtins.length cfg.debUrls)} deb")
+        ++ (lib.optional (cfg.debGetPackages != [ ])
+          "${toString (builtins.length cfg.debGetPackages)} deb-get");
+    in lib.concatStringsSep " + " parts;
 
   mkPlaybook = cfg:
     let
@@ -129,19 +146,20 @@
       inherit tasks;
     }]);
 
-  hasWork = cfg:
-    cfg.aptPackages != [ ] || cfg.aptRepos != [ ] || cfg.debUrls != [ ]
-    || cfg.debGetPackages != [ ];
-
-  mkSummary = cfg:
-    let
-      parts = (lib.optional (cfg.aptPackages != [ ])
-        "${toString (builtins.length cfg.aptPackages)} apt")
-        ++ (lib.optional (cfg.aptRepos != [ ])
-          "${toString (builtins.length cfg.aptRepos)} repo")
-        ++ (lib.optional (cfg.debUrls != [ ])
-          "${toString (builtins.length cfg.debUrls)} deb")
-        ++ (lib.optional (cfg.debGetPackages != [ ])
-          "${toString (builtins.length cfg.debGetPackages)} deb-get");
-    in lib.concatStringsSep " + " parts;
+  mkRunner = cfg: playbook:
+    pkgs.writeShellScript "nix-apt-run" ''
+      if [ ! -x /usr/bin/apt-get ]; then
+        echo "[nix-apt] apt-get not found, skipping (not Debian/Ubuntu)"
+        exit 0
+      fi
+      echo "[nix-apt] applying: ${mkSummary cfg}"
+      output=$(${pkgs.ansible}/bin/ansible-playbook -i localhost, ${playbook} 2>&1)
+      status=$?
+      if [ $status -ne 0 ]; then
+        echo "$output" | sed 's/^/  /'
+        exit $status
+      fi
+      recap=$(echo "$output" | grep -oE 'ok=[0-9]+ +changed=[0-9]+ +unreachable=[0-9]+ +failed=[0-9]+' | head -1)
+      echo "[nix-apt] $recap"
+    '';
 }
