@@ -80,6 +80,26 @@ Run `sudo -v` first to cache credentials, then `home-manager switch`.
   nix-apt prepends that automatically using `/etc/apt/keyrings/<name>.gpg`.
 - `name` is used as both keyring filename and `sources.list.d/<name>.list` filename — keep it short and stable.
 
+## Notes on `debUrls`
+
+- nix-apt does **not** auto-detect architecture. Pick the URL that matches your machine
+  (`amd64` for x86_64, `arm64` for aarch64). A wrong-arch URL fails with
+  `Wrong architecture 'amd64' -- Run dpkg --add-architecture to add it`.
+- Use direct release-asset URLs that don't redirect mid-download. GitHub release URLs
+  using `/releases/download/...` work fine.
+- Each URL becomes a separate Ansible task — failures stop the rest of the playbook.
+
+## Notes on `debGetPackages`
+
+- Only Ubuntu/Debian releases supported by [deb-get itself](https://github.com/wimpysworld/deb-get)
+  will work — typically current LTS + the latest stable. Pre-release or non-LTS versions
+  (e.g. Ubuntu 26.04 "Resolute" before deb-get adds support) will fail with
+  `ERROR! Ubuntu <codename> is not supported`.
+- Run `deb-get list` once to confirm the recipe name (e.g. `code` for VSCode, not `vscode`;
+  `brave-browser` not `brave`).
+- nix-apt bootstraps deb-get itself by piping the upstream install script through `bash`
+  with the `creates: /usr/bin/deb-get` Ansible guard — re-runs are no-ops.
+
 ## How it works
 
 1. Nix evaluates `services.nix-apt.*` options.
