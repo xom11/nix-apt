@@ -25,26 +25,30 @@ Bridges Nix declarative config to Ansible playbook execution. Supports four inpu
 
 ## Quick start
 
-### With system-manager (recommended — runs as root, no sudo workaround)
+Two complete copy-pasteable flake examples in [`examples/`](./examples):
+
+- [`examples/system-manager/`](./examples/system-manager/) — recommended, runs as root via systemd
+- [`examples/home-manager/`](./examples/home-manager/) — works, prompts sudo at activation
+
+### Minimal usage (system-manager)
 
 ```nix
 {
-  inputs = {
-    nix-apt.url = "github:xom11/nix-apt";
-    system-manager.url = "github:numtide/system-manager";
-  };
+  inputs.nix-apt.url = "github:xom11/nix-apt";
+  inputs.system-manager.url = "github:numtide/system-manager";
 
-  outputs = { self, system-manager, nix-apt, ... }: {
+  outputs = { system-manager, nix-apt, ... }: {
     systemConfigs.default = system-manager.lib.makeSystemConfig {
       modules = [
         nix-apt.systemManagerModules.default
-        ({ ... }: {
+        {
+          system-manager.allowAnyDistro = true;
           services.nix-apt = {
             enable = true;
             aptPackages = [ "git" "kitty" ];
             debGetPackages = [ "brave-browser" "tailscale" ];
           };
-        })
+        }
       ];
     };
   };
@@ -53,29 +57,28 @@ Bridges Nix declarative config to Ansible playbook execution. Supports four inpu
 
 Apply: `sudo system-manager switch --flake .`
 
-### With home-manager (works, but needs sudo at activation)
+### Minimal usage (home-manager)
 
 ```nix
-{
-  inputs.nix-apt.url = "github:xom11/nix-apt";
+imports = [ inputs.nix-apt.homeManagerModules.default ];
 
-  # In your home.nix:
-  imports = [ inputs.nix-apt.homeManagerModules.default ];
-
-  services.nix-apt = {
-    enable = true;
-    aptPackages = [ "git" ];
-    aptRepos = [{
-      name = "brave";
-      keyUrl = "https://brave-browser-apt-release.s3.brave.com/brave-browser-archive-keyring.gpg";
-      repo = "https://brave-browser-apt-release.s3.brave.com/ stable main";
-    }];
-    debGetPackages = [ "tailscale" ];
-  };
-}
+services.nix-apt = {
+  enable = true;
+  aptPackages = [ "git" ];
+  debGetPackages = [ "tailscale" ];
+};
 ```
 
 Run `sudo -v` first to cache credentials, then `home-manager switch`.
+
+## Notes on `aptRepos`
+
+- `keyUrl` should point to a **binary GPG keyring** (`.gpg`). Ansible's `get_url` does NOT
+  convert ASCII-armored `.asc` keys. If the upstream only ships `.asc`, download once and
+  rehost, or convert with `gpg --dearmor`.
+- `repo` is the source line **excluding** the leading `deb [signed-by=...] ` part —
+  nix-apt prepends that automatically using `/etc/apt/keyrings/<name>.gpg`.
+- `name` is used as both keyring filename and `sources.list.d/<name>.list` filename — keep it short and stable.
 
 ## How it works
 
